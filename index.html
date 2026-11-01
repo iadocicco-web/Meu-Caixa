@@ -49,10 +49,18 @@ input:focus,select:focus,button:focus-visible{outline:2px solid var(--ac);outlin
 .tag.r{background:var(--negs);color:var(--neg)}.tag.g{background:var(--gds);color:var(--gd)}
 .x{border:0;background:none;color:var(--mut);cursor:pointer;font:inherit;padding:8px;min-height:40px}
 .tabs{position:fixed;left:0;right:0;bottom:0;background:var(--sf);border-top:1px solid var(--ln);display:flex;padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px));z-index:5}
-.tabs button{flex:1;border:0;background:none;color:var(--mut);font:inherit;font-size:12.5px;padding:10px 2px;border-radius:10px;cursor:pointer;min-height:44px}
+.tabs button{flex:1;border:0;background:none;color:var(--mut);font:inherit;font-size:12px;padding:10px 0;border-radius:10px;cursor:pointer;min-height:44px}
 .tabs button.on{color:var(--ac);font-weight:800;background:var(--acs)}
 .pay{display:flex;gap:8px;margin-top:10px}.pay input{flex:1}
 .empty{text-align:center;color:var(--mut);padding:18px 8px}
+.tw{overflow-x:auto;margin-top:10px;border:1px solid var(--ln);border-radius:10px}
+.tbl{border-collapse:collapse;min-width:700px;width:100%;font-size:14px}
+.tbl th{text-align:left;font-weight:700;padding:9px 6px;border-bottom:1px solid var(--ln);white-space:nowrap;user-select:none;background:var(--bg)}
+.tbl td{border-bottom:1px solid var(--ln);padding:0}
+.tbl tbody tr:nth-child(even){background:var(--bg)}
+.tbl td:nth-child(1){width:150px}
+.tbl input,.tbl select{border:0;border-radius:0;background:transparent;min-height:42px;padding:6px}
+.lg{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:14px}.lg i{width:12px;height:12px;border-radius:3px;flex:none}.lg span{flex:1}
 </style>
 </head>
 <body>
@@ -77,7 +85,7 @@ const PF={
  familia:{n:"Casal/Família",cats:["Moradia","Mercado","Contas da casa","Transporte","Saúde","Filhos","Lazer","Outros"],inc:["Salário","Renda extra","Rendimentos"],who:["Eu","Parceiro(a)","Compartilhado"]},
  negocio:{n:"Negócio",cats:["Fornecedores","Impostos","Marketing","Ferramentas","Pró-labore","Transporte","Outros"],inc:["Vendas","Serviços","Outras entradas"]}
 };
-const TABS=[["resumo","Resumo"],["lanc","Lançamentos"],["div","Dívidas"],["meta","Metas"],["conta","Conta"]];
+const TABS=[["resumo","Resumo"],["lanc","Lançar"],["graf","Gráficos"],["div","Dívidas"],["meta","Metas"],["conta","Conta"]];
 const today=()=>{const t=new Date();return t.getFullYear()+"-"+String(t.getMonth()+1).padStart(2,"0")+"-"+String(t.getDate()).padStart(2,"0")};
 let S={p:"pessoal",tab:"resumo",m:today().slice(0,7),ft:"d",d:{}},DB=null,UID=null,ready=false,status="Conectando…",dirty=new Set(),timer=null,localOnly=false;
 try{const l=JSON.parse(localStorage.getItem("meucaixa_prefs"));if(l){if(PF[l.p])S.p=l.p;if(/^\d{4}-\d\d$/.test(l.m))S.m=l.m}}catch(e){}
@@ -113,9 +121,9 @@ const id=()=>Date.now()+Math.random();
 const sum=a=>a.reduce((s,x)=>s+x,0);
 const monthName=m=>new Date(m+"-15").toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
 function go(fn){fn();mark("meta");mark(S.m);save();render()}
-async function nav(fn){try{fn();await loadProfile(S.p)}catch(e){status="Erro ao carregar dados."}save();render()}
+async function nav(fn){try{fn();await loadProfile(S.p);if(S.tab==="graf")for(const m of last6())await loadMonth(m)}catch(e){status="Erro ao carregar dados."}save();render()}
 function setP(p){nav(()=>S.p=p)}
-function setTab(t){S.tab=t;render()}
+async function setTab(t){S.tab=t;if(t==="graf"){try{for(const m of last6())await loadMonth(m)}catch(e){}}render()}
 function shift(n){nav(()=>{const [y,m]=S.m.split("-").map(Number);const d=new Date(y,m-1+n,1);S.m=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")})}
 function setT(t){S.ft=t;save();const pw=document.getElementById("ptw");if(pw)pw.style.display=t==="d"?"":"none";document.querySelectorAll("#ftb button").forEach(b=>b.classList.toggle("on",b.dataset.t===t));$c().innerHTML=opts(t)}
 const $c=()=>document.getElementById("cat");
@@ -183,6 +191,76 @@ function months(b,r,p){
   if(p<=b*r)return null;
   return Math.ceil(-Math.log(1-b*r/p)/Math.log(1+r));
 }
+const esc=s=>String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let FL={q:"",t:"",c:"",w:""},SO={k:"dt",d:-1};
+const COL=["#0E9F8A","#E0703F","#D9A441","#5B7FD6","#B35FB5","#7A8B96"];
+const last6=()=>{const [y,m]=S.m.split("-").map(Number);return [5,4,3,2,1,0].map(n=>{const d=new Date(y,m-1-n,1);return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")})};
+function rows(){
+  const q=FL.q.toLowerCase();
+  const r=TX().filter(x=>(!FL.t||x.t===FL.t)&&(!FL.c||x.c===FL.c)&&(!FL.w||x.w===FL.w)&&(!q||(x.desc||"").toLowerCase().includes(q)||x.c.toLowerCase().includes(q)));
+  const k=SO.k,d=SO.d;
+  return r.sort((a,b)=>(k==="v"?a.v-b.v:String(a[k]||"").localeCompare(String(b[k]||"")))*d);
+}
+const tot=r=>{const e=sum(r.filter(x=>x.t==="r").map(x=>x.v)),s=sum(r.filter(x=>x.t==="d").map(x=>x.v));return `<span class="mut">${r.length} linhas</span><span>Entradas <b class="pos">${brl(e)}</b> · Saídas <b class="neg">${brl(s)}</b> · Saldo <b>${brl(e-s)}</b></span>`};
+function refreshTab(){const e=document.getElementById("tbw");if(e)e.innerHTML=tabBody()}
+function refreshTot(){const e=document.getElementById("tot");if(e)e.innerHTML=tot(rows())}
+function setF(k,v){FL[k]=v;refreshTab()}
+function sortBy(k){if(SO.k===k)SO.d*=-1;else{SO.k=k;SO.d=k==="v"?-1:1}refreshTab()}
+async function edTx(i,k,v){
+  const x=TX().find(t=>t.id===i);if(!x)return;
+  if(k==="v"){const n=num(v);if(n<=0){refreshTab();return}x.v=n}
+  else if(k==="t"){x.t=v;x.c=(v==="d"?PF[S.p].cats:PF[S.p].inc)[0];if(v==="r")x.pt=""}
+  else if(k==="dt"){
+    if(!v){refreshTab();return}
+    const nm=v.slice(0,7);
+    if(nm!==S.m){
+      try{await loadMonth(nm)}catch(e){alert("Sem conexão com a nuvem. Tente de novo.");refreshTab();return}
+      D().tx[S.m]=TX().filter(t=>t.id!==i);x.dt=v;TXA(nm).push(x);mark(S.m);mark(nm);save();refreshTab();return}
+    x.dt=v}
+  else x[k]=v;
+  mark(S.m);save();
+  if(k==="t")refreshTab();else refreshTot();
+}
+function tabBody(){
+  const r=rows(),fam=S.p==="familia",W=PF.familia.who,P=PF[S.p];
+  const th=(k,n)=>`<th onclick="sortBy('${k}')" style="cursor:pointer">${n}${SO.k===k?(SO.d>0?" ▲":" ▼"):""}</th>`;
+  const body=r.map(x=>{
+    const cl=x.t==="d"?P.cats:P.inc,cs=cl.includes(x.c)?cl:[x.c,...cl];
+    return `<tr><td><input type="date" value="${x.dt}" aria-label="Data" onchange="edTx(${x.id},'dt',this.value)"></td>
+    <td><input value="${esc(x.desc)}" placeholder="${esc(x.c)}" aria-label="Descrição" onchange="edTx(${x.id},'desc',this.value)"></td>
+    <td><select aria-label="Categoria" onchange="edTx(${x.id},'c',this.value)">${cs.map(c=>`<option${c===x.c?" selected":""}>${esc(c)}</option>`).join("")}</select></td>
+    ${fam?`<td><select aria-label="Quem" onchange="edTx(${x.id},'w',this.value)">${W.map(w=>`<option${w===x.w?" selected":""}>${w}</option>`).join("")}</select></td>`:""}
+    <td><select aria-label="Tipo" onchange="edTx(${x.id},'t',this.value)"><option value="d"${x.t==="d"?" selected":""}>Despesa</option><option value="r"${x.t==="r"?" selected":""}>Receita</option></select></td>
+    <td><input inputmode="decimal" class="${x.t==="d"?"neg":"pos"}" style="text-align:right;font-weight:700" value="${String(x.v).replace(".",",")}" aria-label="Valor" onchange="edTx(${x.id},'v',this.value)"></td>
+    <td><button class="x" onclick="delTx(${x.id})" aria-label="Remover lançamento">✕</button></td></tr>`}).join("");
+  return `<div class="tw"><table class="tbl"><thead><tr>${th("dt","Data")}<th>Descrição</th>${th("c","Categoria")}${fam?"<th>Quem</th>":""}<th>Tipo</th>${th("v","Valor")}<th></th></tr></thead><tbody>${body||`<tr><td colspan="7" class="empty">Nenhum lançamento encontrado.</td></tr>`}</tbody></table></div>
+  <div class="li" style="border:0;flex-wrap:wrap" id="tot">${tot(r)}</div>`;
+}
+function vTabela(){
+  const fam=S.p==="familia",P=PF[S.p],all=[...new Set([...P.cats,...P.inc,...TX().map(x=>x.c)])];
+  return `<div class="card"><div class="f"><div class="full"><input id="fq" placeholder="Buscar por descrição ou categoria" value="${esc(FL.q)}" oninput="setF('q',this.value)" aria-label="Buscar"></div>
+  <div><select onchange="setF('t',this.value)" aria-label="Filtrar por tipo"><option value="">Todos os tipos</option><option value="d"${FL.t==="d"?" selected":""}>Despesas</option><option value="r"${FL.t==="r"?" selected":""}>Receitas</option></select></div>
+  <div><select onchange="setF('c',this.value)" aria-label="Filtrar por categoria"><option value="">Todas as categorias</option>${all.map(c=>`<option${c===FL.c?" selected":""}>${esc(c)}</option>`).join("")}</select></div>
+  ${fam?`<div class="full"><select onchange="setF('w',this.value)" aria-label="Filtrar por pessoa"><option value="">Todas as pessoas</option>${PF.familia.who.map(w=>`<option${w===FL.w?" selected":""}>${w}</option>`).join("")}</select></div>`:""}
+  </div><div class="mut" style="margin-top:8px">Toque em qualquer célula para editar. Toque no título Data, Categoria ou Valor para ordenar.</div><div id="tbw">${tabBody()}</div></div>`;
+}
+function vGraf(){
+  const ms=last6(),t=ms.map(m=>({m,r:sum(TX(m).filter(x=>x.t==="r").map(x=>x.v)),d:sum(TX(m).filter(x=>x.t==="d").map(x=>x.v))}));
+  const mx=Math.max(1,...t.map(a=>Math.max(a.r,a.d))),W=340,H=170,pb=26,ph=H-pb-10,bw=14;
+  const bars=t.map((a,i)=>{const x=10+i*54,hr=a.r/mx*ph,hd=a.d/mx*ph;
+    return `<rect x="${x}" y="${H-pb-hr}" width="${bw}" height="${hr}" rx="3" style="fill:var(--ac)"><title>Entradas ${brl(a.r)}</title></rect><rect x="${x+bw+3}" y="${H-pb-hd}" width="${bw}" height="${hd}" rx="3" style="fill:var(--neg)"><title>Saídas ${brl(a.d)}</title></rect><text x="${x+bw}" y="${H-8}" text-anchor="middle" font-size="11" style="fill:var(--mut)">${a.m.slice(5)}/${a.m.slice(2,4)}</text>`}).join("");
+  const any=t.some(a=>a.r>0||a.d>0);
+  const by={};TX().filter(x=>x.t==="d").forEach(x=>by[x.c]=(by[x.c]||0)+x.v);
+  let es=Object.entries(by).sort((a,b)=>b[1]-a[1]);
+  if(es.length>6){const o=sum(es.slice(5).map(e=>e[1]));es=[...es.slice(0,5),["Outras",o]]}
+  const T=sum(es.map(e=>e[1])),C=2*Math.PI*50;let off=0;
+  const segs=es.map(([n,v],i)=>{const l=v/T*C;const c=`<circle cx="70" cy="70" r="50" fill="none" stroke="${COL[i]}" stroke-width="22" stroke-dasharray="${l} ${C-l}" stroke-dashoffset="${-off}" transform="rotate(-90 70 70)"><title>${esc(n)} ${brl(v)}</title></circle>`;off+=l;return c}).join("");
+  return `<div class="nav"><button onclick="shift(-1)" aria-label="Mês anterior">‹</button><span>${monthName(S.m)}</span><button onclick="shift(1)" aria-label="Próximo mês">›</button></div>
+  <h2>Entradas e saídas (6 meses)</h2><div class="card">${any?`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Gráfico de barras de entradas e saídas dos últimos 6 meses"><line x1="0" x2="${W}" y1="${H-pb}" y2="${H-pb}" style="stroke:var(--ln)"/>${bars}</svg>
+  <div class="lg"><i style="background:var(--ac)"></i><span>Entradas</span><i style="background:var(--neg)"></i><span>Saídas</span></div>`:`<div class="empty">Sem lançamentos nos últimos 6 meses.</div>`}</div>
+  <h2>Despesas por categoria</h2><div class="card">${T>0?`<svg viewBox="0 0 140 140" width="200" height="200" style="display:block;margin:0 auto" role="img" aria-label="Gráfico de rosca das despesas por categoria">${segs}<text x="70" y="66" text-anchor="middle" font-size="10" style="fill:var(--mut)">Total</text><text x="70" y="82" text-anchor="middle" font-size="13" font-weight="700" style="fill:var(--ink)">${brl(T)}</text></svg>
+  <div style="margin-top:8px">${es.map(([n,v],i)=>`<div class="lg"><i style="background:${COL[i]}"></i><span>${esc(n)}</span><b>${brl(v)}</b><span class="mut" style="flex:none;width:42px;text-align:right">${Math.round(v/T*100)}%</span></div>`).join("")}</div>`:`<div class="empty">Sem despesas neste mês.</div>`}</div>`;
+}
 const POTES=[["casa","Contas da casa"],["guardar","Guardar"],["investir","Investir"],["juntos","Saídas juntos"],["pessoal","Pessoal"]];
 const CFG=()=>D().cfg||{modo:"casal",jw:"Eu",pct:{casa:50,guardar:10,investir:10,juntos:10,pessoal:20}};
 function saveCfg(){
@@ -246,7 +324,7 @@ function vLanc(){
    ${who?`<div class="full" id="ptw" style="${S.ft==="d"?"":"display:none"}"><label for="pt">Pote do orçamento</label><select id="pt">${POTES.map(([k,n])=>`<option value="${k}">${n}</option>`).join("")}</select></div>`:""}
    <div class="full"><label for="desc">Descrição (opcional)</label><input id="desc" placeholder="Ex.: mercado da semana"></div>
    <div class="full"><button class="btn" onclick="addTx()">Salvar lançamento</button></div></div></div>
-   <h2>${monthName(S.m)}</h2><div class="card">${tx.length?tx.map(x=>`<div class="li"><div><div>${x.desc||x.c}<span class="tag ${x.t==="d"?"r":""}">${x.c}</span></div><div class="mut">${x.dt.split("-").reverse().join("/")}${x.w?" · "+x.w:""}</div></div><div style="text-align:right;white-space:nowrap"><b class="${x.t==="d"?"neg":"pos"}">${x.t==="d"?"−":"+"}${brl(x.v)}</b><br><button class="x" onclick="delTx(${x.id})">Remover</button></div></div>`).join(""):`<div class="empty">Sem lançamentos neste mês. Preencha o formulário acima.</div>`}</div>`;
+   <div class="nav"><button onclick="shift(-1)" aria-label="Mês anterior">‹</button><span>${monthName(S.m)}</span><button onclick="shift(1)" aria-label="Próximo mês">›</button></div>${vTabela()}`;
 }
 function vDiv(){
   const ds=[...D().debts].sort((a,b)=>b.r-a.r);
@@ -284,7 +362,7 @@ function render(){
   if(!UID){document.getElementById("prof").innerHTML="";document.getElementById("tabs").innerHTML="";document.getElementById("app").innerHTML=vLogin();bar();return}
   document.getElementById("prof").innerHTML=Object.entries(PF).map(([k,v])=>`<button class="${S.p===k?"on":""}" onclick="setP('${k}')">${v.n}</button>`).join("");
   document.getElementById("tabs").innerHTML=TABS.map(([k,n])=>`<button class="${S.tab===k?"on":""}" onclick="setTab('${k}')">${n}</button>`).join("");
-  document.getElementById("app").innerHTML={resumo:vResumo,lanc:vLanc,div:vDiv,meta:vMeta,conta:vConta}[S.tab]();bar();
+  document.getElementById("app").innerHTML={resumo:vResumo,lanc:vLanc,graf:vGraf,div:vDiv,meta:vMeta,conta:vConta}[S.tab]();bar();
 }
 function vLogin(){
   if(!window.supabase)return `<h2>Sem conexão</h2><div class="card" style="background:var(--negs);border-color:var(--neg)"><b>Não foi possível carregar o Supabase.</b><div class="mut">Verifique a internet e abra o app pelo link publicado (não dentro do Claude). Se continuar, o navegador pode estar bloqueando scripts externos.</div></div>`;
